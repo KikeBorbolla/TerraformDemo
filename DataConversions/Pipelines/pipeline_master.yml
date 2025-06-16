@@ -1,0 +1,91 @@
+parameters: 
+- name: stages
+  displayName: " "
+  default: "Stages"
+- name: param_enable_DevStage
+  displayName: Enable Dev
+  type: boolean
+  default: true
+- name: param_enable_TestStage
+  displayName: Enable Test
+  type: boolean
+  default: false
+- name: param_enable_ProdStage
+  displayName: Enable Prod
+  type: boolean
+  default: false
+- name: working_project
+  displayName: "Type MAIN project name:"
+  default: Terraform Upskills
+- name: working_repo
+  displayName: "Type MAIN repo name:"
+  default: TerraformDemo
+- name: working_branch
+  displayName: "Type MAIN branch name:"
+  default: Features/feature_israel #develop
+- name: modules_project
+  displayName: "Type MODULES project name:"
+  default: Terraform Upskills
+- name: modules_repo
+  displayName: "Type MODULES repo name:"
+  default: TerraformDemo-Modules
+- name: modules_branch
+  displayName: "Type MODULES branch name:"
+  default: Features/feature_modules_israel #develop
+- name: deploy_message
+  displayName: " "
+  default: "Deploy Resources?"  
+- name: deploy_resources
+  displayName: Yes
+  type: boolean
+  default: false 
+
+# # variables:
+# #   - name: variable_name
+# #     value: "variable value"
+
+trigger: none
+
+stages:
+  
+  #######################################  DEVELOPMENT  ###################################
+  - stage: Dev_Stage
+    displayName: Dev_Stage
+    variables:
+      - template: Variables/Dev/Vars.yml
+    condition: eq('${{ parameters.param_enable_DevStage }}', 'true')
+
+    jobs:
+    - deployment: DataConversions
+      displayName: Data Conversions
+      environment: Terraform-${{ variables.paramTFEnvironment }}
+      pool: "${{ variables.paramAgentPool}}"
+      strategy: 
+        runOnce:
+          deploy:
+            steps: 
+            - template: 'deploy/pipeline_deployment_hola.yml'
+              parameters:
+                environment: ${{ variables.paramTFEnvironment }}
+                service_connection: ${{ variables.paramTFServiceConnection_aqui}}
+                deploy_resources: ${{ parameters.deploy_resources }}
+                working_project: ${{ parameters.working_project }}
+                working_repo: ${{ parameters.working_repo }}
+                working_branch: ${{ parameters.working_branch }}
+                modules_project: ${{ parameters.modules_project }}
+                modules_repo: ${{ parameters.modules_repo }}
+                modules_branch: ${{ parameters.modules_branch }}                    
+          
+  # #######################################  TEST  #########################################
+  # - stage: Test_Stage
+  #   displayName: Test_Stage
+  #   variables:
+  #     - template: Variables/Test/Vars.yml
+  #   condition: eq('${{ parameters.param_enable_TestStage }}', 'true')
+
+  # # #######################################  Prod  #########################################
+  # - stage: Prod_Stage
+  #   displayName: Prod_Stage
+  #   variables:
+  #     - template: Variables/Prod/Vars.yml
+  #   condition: eq('${{ parameters.param_enable_ProdStage }}', 'true')

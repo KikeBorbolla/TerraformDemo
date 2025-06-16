@@ -1,0 +1,15 @@
+variables:
+- name: paramTFResourceGroup
+  value: RG-Israel
+- name: paramTFstorageaccount
+  value: statedadlstfst001
+- name: paramTFcontainer
+  value: statefiles
+- name: paramTFstoragelocation
+  value: SouthCentralUS
+- name: paramTFEnvironment
+  value: Dev  
+- name: paramTFServiceConnection
+  value: Dev_ServiceConnection  # Need to update this service connection per environment when available     
+- name: paramAgentPool
+  value: Azure Pipelines   #Need to update this Agent Pool per environment when available

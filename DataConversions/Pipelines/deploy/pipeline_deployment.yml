@@ -1,0 +1,116 @@
+# Master file for stage deployment
+parameters:
+  - name: environment
+    type: string
+  - name: working_project
+    type: string
+  - name: working_repo
+    type: string
+  - name: working_branch
+    type: string
+  - name: modules_project
+    type: string
+  - name: modules_repo
+    type: string
+  - name: modules_branch
+    type: string
+  - name: service_connection
+    type: string 
+  - name: deploy_resources
+    type: boolean
+
+steps:
+
+- checkout: self
+- checkout: git://${{ parameters.modules_project }}/${{ parameters.modules_repo }}@${{ parameters.modules_branch }}
+
+
+# Task to retrieve SPN credentials for VM / Synapse
+- task: AzureCLI@2
+  displayName: 'Set credentials to environment variable'
+  inputs:
+    azureSubscription: '${{ parameters.service_connection }}'
+    scriptType: 'pscore'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      Write-Host "##vso[task.setvariable variable=TF_VAR_CLIENT_SECRET;]${env:servicePrincipalKey}"
+
+      $subscriptionId = convertfrom-json (az account list --query "[?isDefault].id | [0]")
+      Write-Host "##vso[task.setvariable variable=TF_VAR_SUBSCRIPTION_ID;]$subscriptionId"
+    addSpnToEnvironment: true
+
+# install latest terraform version on agent
+- task: TerraformInstaller@0
+  displayName: Install terraform
+  inputs:
+    terraformVersion: 'latest'
+
+- task: PowerShell@2
+  displayName: 'Set Terraform Plan command options'
+  inputs:
+    targetType: 'inline'
+    script: |
+      $envFolder = "${{parameters.environment}}"
+
+      $domainFileOption = ""
+      $domainFileConfigPath = "tfvars/$envFolder-config.tfvars"
+      $fileExists = Test-Path -Path $domainFileConfigPath
+      if ($fileExists -eq $true) {
+          $domainFileOption = "-var-file=$domainFileConfigPath"
+      }
+      $commandOptions = "-var-file=tfvars/Common-config.tfvars -var-file=tfvars/$envFolder-config.tfvars $domainFileOption"
+      Write-Host "TF Plan Option --> $commandOptions"
+      Write-Host "##vso[task.setvariable variable=TFPlan_CommandOptions;]$commandOptions" 
+
+# terraform init command (aims to tf templates folder) 
+- task: TerraformTaskV3@3
+  displayName: Terraform init
+  inputs:
+    provider: 'azurerm'
+    command: 'init'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.working_repo }}/DataConversions/Terraform'
+    backendServiceArm: '${{ parameters.service_connection }}'
+    backendAzureRmResourceGroupName: '$(paramTFResourceGroup)'
+    backendAzureRmStorageAccountName: '$(paramTFstorageaccount)'
+    backendAzureRmContainerName: '$(paramTFcontainer)'    
+    backendAzureRmKey: '${{parameters.environment}}_DataConversions.tfstate'
+
+# terraform valid command (aims to tf templates folder) 
+- task: TerraformTaskV3@3
+  displayName: Terraform validate
+  inputs:
+    provider: 'azurerm'
+    command: 'validate'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.working_repo }}/DataConversions/Terraform'
+
+# terraform plan command (aims to tfvars template and outputs tfplan file) 
+- task: TerraformTaskV3@3
+  displayName: Terraform plan
+  inputs:
+    provider: 'azurerm'
+    command: 'plan'
+    commandOptions: "$(TFPlan_CommandOptions) -out=tfplan -input=false"
+    workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.working_repo }}/DataConversions/Terraform_Israel'
+    environmentServiceNameAzureRM: '${{ parameters.service_connection }}'
+
+
+# terraform apply command.
+# # - task: TerraformTaskV3@3
+# #   displayName: Terraform apply
+# #   inputs:
+# #     provider: 'azurerm'
+# #     command: 'apply'
+# #     workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.working_repo }}/DataConversions/Terraform_Ethan'
+# #     commandOptions: 'tfplan'
+# #     environmentServiceNameAzureRM: '${{ parameters.service_connection }}'
+# #   condition: and(succeeded(), eq('${{ parameters.deploy_resources }}', 'true'))
+
+- task: TerraformTaskV3@3
+  name: terraformOutput
+  displayName: Terraform output
+  inputs:
+    provider: 'azurerm'
+    command: 'output'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.working_repo }}/DataConversions/Terraform'
+    environmentServiceNameAzureRM: '${{ parameters.service_connection }}'
+  condition: and(succeeded(), eq('${{ parameters.deploy_resources }}', 'true'))
